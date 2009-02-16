@@ -20,7 +20,7 @@ def test(tests, method):
         start = time()
         method()
         end = time()
-        print "finished %s in %s" % (mname, end - start)
+        print "finished %s in %.1f seconds" % (mname, end - start) 
     f.__name__ = mname
         
     tests.append(f)

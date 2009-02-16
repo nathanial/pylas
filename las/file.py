@@ -137,10 +137,11 @@ class LasCurve(object):
 
     @staticmethod
     def to_las(curves):
-        cols = curves[0].data_len()
-        rows = [[field[col] for field in curves] for col in range(0, cols)]
-        return "~Ascii\n" + "\n".join(
-            map(lambda r: " ".join(map(str, r)), rows))
+        rows = len(curves[0].data)
+        matrix = [[curve[row] for curve in curves] for row in range(0, rows)]
+        lines = [" ".join(map(str,row)) for row in matrix]
+        return "~Ascii\n" + "\n".join(lines)
+
 
     @staticmethod
     def find_with_mnemonic(mnemonic, curves):

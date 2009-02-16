@@ -59,7 +59,7 @@ def lasfile_to_las():
 def write_lasfile():
     lf =  LasFile.from_(tf_path)
     lf.depth[0] = "yack"
-    assert "yack" in lf.to_las()
+    assert "yack" in lf.to_las()    
 
 #Test Transformed Las Field
 
