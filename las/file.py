@@ -26,10 +26,10 @@ class LasFile(object):
 
     def __eq__(self,that):
         return (isinstance(that, LasFile) and
-                self.version_header == that.version_header,
-                self.well_header == that.well_header,
-                self.curve_header == that.curve_header,
-                self.parameter_header == that.parameter_header,
+                self.version_header == that.version_header and
+                self.well_header == that.well_header and
+                self.curve_header == that.curve_header and
+                self.parameter_header == that.parameter_header and
                 self.curves == that.curves)
 
     @staticmethod
