@@ -2,16 +2,6 @@ import re
 import new
 from util import lfind, tuplize, read_file
 
-def preprocess_str(obj):
-    if isinstance(obj, str):
-        obj = obj.strip()
-        if obj == "":
-            return None
-        else:
-            return obj
-    else:
-        return obj
-
 class LasFile(object):
     def __init__(self, version_header, well_header, curve_header, parameter_header, curves):
         self.version_header = version_header
@@ -62,10 +52,10 @@ class LasFile(object):
 
 class Descriptor(object):
     def __init__(self, mnemonic, unit = None, data = None, description = None):
-        self.mnemonic = preprocess_str(mnemonic)
-        self.unit = preprocess_str(unit)
-        self.data = preprocess_str(data)
-        self.description = preprocess_str(description)
+        self.mnemonic = mnemonic
+        self.unit = unit
+        self.data = data
+        self.description = description
 
     def __str__(self):
         return "mnemonic = %s, unit = %s, data = %s, description = %s" % (

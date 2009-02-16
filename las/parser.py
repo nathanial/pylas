@@ -40,7 +40,6 @@ class Parser:
                        parameter_header,
                        las_data)
         
-
     def well_header(self): 
         parser = self.grab("~W")
         parser.well_start()
@@ -114,20 +113,24 @@ class Parser:
     def descriptor(self):
         self.skip_spaces()
         line = self.line()
+        def preprocess(stuff):
+            stuff = stuff.strip()
+            if stuff == "":
+                return None
+            elif is_number(stuff):
+                return to_num(stuff)
+            else:
+                return stuff
+
         if line:
             if line.strip()[:2] in start_symbols: 
                 self.backtrack(line)
                 return
             parser = Parser(line)
-            mnemonic = parser.upto("[.]")
-            unit = parser.zapto("[ ]")
-            data = parser.zapto_last("[:]")
-            if data: 
-                data = data[:-1].strip()
-                if is_number(data): 
-                    data = to_num(data)
-                
-            description = parser.current_input()
+            mnemonic = preprocess(parser.upto("[.]"))
+            unit = preprocess(parser.upto("[ ]"))
+            data = preprocess(parser.upto_last("[:]"))
+            description = preprocess(parser.current_input())
             return Descriptor(mnemonic, unit, data, description)
         
     def skip_spaces(self):
@@ -171,7 +174,10 @@ class Parser:
     def upto(self,pattern):
         ret = self.do_match("(\A.*?)"+pattern, 0)
         if ret: return ret[:-1]
-        
+
+    def upto_last(self, pattern):
+        ret = self.do_match("\A.*"+pattern,0)
+        if ret: return ret[:-1]
 
     def get_ignore_space(self, pattern):
         return self.do_match("(\A[\n\r\t ]*)("+pattern+")", 2)

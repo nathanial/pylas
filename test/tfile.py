@@ -31,7 +31,9 @@ def header_attributes():
 def descriptor_to_las():
     d = Descriptor("DEPT", "m", None, "DEPTH")
     parser = Parser(d.to_las())
+    print d
     nd = parser.descriptor()
+    print nd
     assert d == nd
     
 #Test Writing
