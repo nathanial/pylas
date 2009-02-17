@@ -58,7 +58,7 @@ def lasfile_to_las():
 @only_if(exists(tf_path))
 def write_lasfile():
     lf =  LasFile.from_(tf_path)
-    lf.depth[0] = "yack"
+    lf.curve('depth')[0] = "yack"
     assert "yack" in lf.to_las()    
 
 #Test Transformed Las Field

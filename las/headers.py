@@ -5,15 +5,7 @@ from util import lfind
 class VersionHeader(object):
     def __init__(self, version, wrap): 
         self.version = version
-        if isinstance(wrap, str):
-            if wrap.strip() == "NO":
-                self.wrap = False
-            elif wrap.strip() == "YES":
-                self.wrap = True
-            else:
-                raise "Unknown value for wrap = %s " % wrap
-        else:
-            self.wrap = wrap
+        self.wrap = wrap
 
     def wrap_string(self):
         if self.wrap: return "YES"
@@ -26,8 +18,8 @@ class VersionHeader(object):
         return self.__str__()
 
     def __eq__(self,that):
-        if not isinstance(that, VersionHeader): return False
-        return (self.version == that.version and
+        return (isinstance(that, VersionHeader) and
+                self.version == that.version and
                 self.wrap == that.wrap)
 
     def to_las(self):
@@ -60,7 +52,7 @@ class HeaderWithDescriptors(HasDescriptors):
 
     def to_las(self):
         return (self.identifier + "\n" + 
-                "\n".join(map(lambda x: x.to_las(), self.descriptors))) + "\n"
+                "\n".join([d.to_las() for d in self.descriptors]) + "\n")
 
 
 def descriptor_header(name, identifier):

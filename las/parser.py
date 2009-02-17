@@ -141,8 +141,8 @@ class BaseParser:
 
     def skip_spaces(self):
         done = False
-        while not self.at_limit() and not done:
-            c = self.char()
+        while self.cursor < self.length and not done:
+            c = self.input[self.cursor]
             if c in white_space:
                 self.cursor += 1
             elif c == "#":
@@ -230,24 +230,34 @@ class Parser(BaseParser):
                                     curve_header)
         return curves
 
+    #micro-optimized
     def get_numbers(self):
         nums = []
-        while not self.at_limit():
-            self.skip_spaces()
-            num = self.get_number()
-            if num != None:
-                nums.append(num)
-        return nums
+        while self.cursor < self.length:
+            #get_number begin
+            start = self.cursor
+            while self.cursor < self.length and self.input[self.cursor] in num_chars:
+                self.cursor += 1
+            num = self.input[start:self.cursor]
+            #get_number end
 
-    def get_number(self):
-        if self.at_limit(): return
-        start = self.cursor
-        while not self.at_limit() and self.input[self.cursor] in num_chars:
-            self.cursor += 1
-        num = self.input[start:self.cursor]
-        if num != "":
-            return to_num(num)
-    
+            if num != '':
+                if "." in num:
+                    nums.append(float(num))
+                else:
+                    nums.append(int(num))
+            #begin skip_spaces
+            done = False
+            while not done and self.cursor < self.length:
+                c = self.input[self.cursor]
+                if c in white_space:
+                    self.cursor += 1
+                elif c == '#':
+                    self.drop_line()
+                else:
+                    done = True
+            #end skip_spaces
+        return nums
 
     def descriptors(self):
         descriptor = self.descriptor()
@@ -277,5 +287,3 @@ class Parser(BaseParser):
 
     def backtrack(self, text):
         self.cursor -= len(text)
-        
-        

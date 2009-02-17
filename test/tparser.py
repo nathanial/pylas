@@ -6,12 +6,18 @@ from las.parser import BaseParser,Parser
 import las.parser as lp
 from test import data
 
+enable_las_testing = True
+enable_benchmark = True
+enable_parse_testing = True
+
 tests = []
 test = partial(test, tests)
-enable_las_testing = True
-las_test = only_if(enable_las_testing)
+las = only_if(enable_las_testing)
+benchmark = only_if(enable_benchmark)
+parse = only_if(enable_parse_testing)
 
 @test
+@parse
 def test_zapping():
     parser = BaseParser(data.text['well_header'])
     parser.drop_line()
@@ -28,7 +34,7 @@ def test_zapping():
            == "Monday, January 26 2009 14:04:02")
 
 @test
-@las_test
+@las
 def test_descriptors():
     def parse(name):
         parser = Parser(data.text['descriptors'][name])
@@ -57,14 +63,14 @@ def test_descriptors():
                               data="Monday, January 26 2009 14:04:02",
                               description="DATE")
 @test
-@las_test
+@las
 def test_version_header():
     parser = Parser(data.text['version_header'])
     version_header = parser.version_header()
     assert version_header == VersionHeader(2.0, False)
     
 @test
-@las_test
+@las
 def test_well_header():
     parser = Parser(data.text['well_header'])
     well_header = parser.well_header()
@@ -72,7 +78,7 @@ def test_well_header():
     assert well_header.date.description == "DATE"
 
 @test
-@las_test
+@las
 def test_curve_header():
     parser = Parser(data.text['curve_header'])
     curve_header = parser.curve_header()
@@ -82,7 +88,7 @@ def test_curve_header():
                   lambda m: m in mnemonics)
 
 @test
-@las_test
+@las
 def test_las_data():
     parser = Parser(data.text['las_data'])
     cols = len(data.curve_header.descriptors)
@@ -96,31 +102,50 @@ from os.path import exists
 tf_path = "test/files/"
 
 @test
-@las_test
+@las
 @only_if(exists(tf_path+"test.las"))
 def test_las_file():
     lf = LasFile.from_(tf_path+"test.las")
-    assert lf.dept[0] == 1501.6290000
+    assert lf.curve('dept')[0] == 1501.6290000
     assert lf.curve_header.gamma.unit == 'gAPI'
     assert lf.curve_header.porosity.unit == 'm3/m3'
     assert lf.curve_header.dept.description == 'DEPTH'
 
 @test
-@las_test
+@las
 @only_if(exists(tf_path+"dollie.las"))
 def test_dollie():
     lf = LasFile.from_(tf_path+"dollie.las")
     assert lf.curve_header.dept.unit == "F"
-    assert lf.dept[0] == 7800
-    assert lf.dept[-1] == 6680
+    assert lf.curve('dept')[0] == 7800
+    assert lf.curve('dept')[-1] == 6680
     assert lf.curve_header.wtoc.unit == "LBF/LBF"
 
 @test
-@las_test
+@las
+@only_if(exists(tf_path+"robert.las"))
+def test_robert():
+    lf = LasFile.from_(tf_path+"robert.las")
+
+@test
+@las
 @only_if(exists(tf_path+"x4.las"))
 def test_x4():
     lf = LasFile.from_(tf_path+"x4.las")
+    wh = lf.well_header
+    
+    assert wh.strt == 57.0
+    assert wh.stop == 5817.0
 
+    parser = Parser(lf.to_las())
+    nlf = parser.las_file()
+    assert lf == nlf
+
+@test
+@benchmark
+@only_if(exists(tf_path+"x4.las"))
+def benchmark_x4():
+    lf = LasFile.from_(tf_path+"x4.las")
 
 if __name__ == "__main__":
     for test in tests:

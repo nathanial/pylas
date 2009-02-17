@@ -8,11 +8,7 @@ class LasFile(object):
         self.well_header = well_header
         self.curve_header = curve_header
         self.parameter_header = parameter_header
-        self.curves = curves
-
-        for mnemonic in self.curve_header.mnemonics():
-            field = LasCurve.find_with_mnemonic(mnemonic, self.curves)
-            setattr(self, mnemonic, field)
+        self._curves = curves
 
     def __eq__(self,that):
         return (isinstance(that, LasFile) and
@@ -20,7 +16,26 @@ class LasFile(object):
                 self.well_header == that.well_header and
                 self.curve_header == that.curve_header and
                 self.parameter_header == that.parameter_header and
-                self.curves == that.curves)
+                self._curves == that._curves)
+
+    def to_las(self):
+        return (self.version_header.to_las() +
+                self.well_header.to_las() + 
+                self.curve_header.to_las() +
+                self.parameter_header.to_las() +
+                LasCurve.to_las(self._curves))
+
+    def curve(self, curve_name):
+        return lfind(self._curves, lambda c: c.name() == curve_name)
+
+    def curves(self, *curve_names):
+        return [self.curve(name) for name in curve_names]
+
+    def curve_mnemonics(self):
+        return self.curve_header.mnemonics()
+
+    def available_curves(self):
+        return self.curve_mnemonics()
 
     @staticmethod
     def from_(path):
@@ -30,25 +45,6 @@ class LasFile(object):
     @staticmethod
     def is_lasfile(filename):
         return True #fixme
-
-    def to_las(self):
-        return (self.version_header.to_las() +
-                self.well_header.to_las() + 
-                self.curve_header.to_las() +
-                self.parameter_header.to_las() +
-                LasCurve.to_las(self.curves))
-
-    def curve_mnemonics(self):
-        return self.curve_header.mnemonics()
-
-    def get_curve(self, curve_name):
-        return getattr(self, curve_name)
-
-    def get_curves(self, *curve_names):
-        return [self.get_curve(name) for name in curve_names]
-
-    def available_curves(self):
-        return self.curve_header.mnemonics()
 
 class Descriptor(object):
     def __init__(self, mnemonic, unit = None, data = None, description = None):
@@ -64,11 +60,15 @@ class Descriptor(object):
     def __repr__(self): return self.__str__()
 
     def __eq__(self, that):
-        if not isinstance(that, Descriptor): return False
-        return (self.mnemonic == that.mnemonic and
-                self.unit == that.unit and
-                self.data == that.data and
-                self.description == that.description)
+        if isinstance(that, Descriptor):
+            return (self.mnemonic == that.mnemonic and
+                    self.unit == that.unit and
+                    self.data == that.data and
+                    self.description == that.description)
+        elif isinstance(that, float) or isinstance(that, int):
+            return self.data == that
+        else:
+            return NotImplemented
 
     def to_las(self):
         data, unit, description = " ", " ", " "
