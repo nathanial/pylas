@@ -4,8 +4,10 @@ from las.headers import *
 from util import subdivide
 import test.data as data
 
-num_regex = "-?\d+([.]\d+)?"
 start_symbols = ["~A", "~C", "~W", "~P", "~V"]
+white_space = ["\n", "\r", "\t", " "]
+num_regex = "-?\d+([.]\d+)?"
+num_chars = "-1234567890."
 
 def is_number(text):
     match = re.match(num_regex, text)
@@ -17,23 +19,167 @@ def is_number(text):
         return False
 
 def to_num(text):
-    try:
-        return int(text)
-    except ValueError:
+    if "." in text:
         return float(text)
+    else:
+        return int(text)
 
-class Parser:
+def to_chars(string):
+    result = ""
+    for c in string:
+        if c == "\n":
+            result = result + "\\n"
+        elif c == "\r":
+            result = result + "\\r"
+        else:
+            result = result + c
+    return result
 
+class BaseParser:
     def __init__(self, input):
         self.input = input
         self.cursor = 0
+        self.length = len(self.input)
+        self.limit = self.length
+        self.excursions = []
+
+    def GuardLimit(method):
+        def f(obj, *args, **kwargs):
+            if not obj.at_limit():
+                return method(obj,*args, **kwargs)
+        return f
+
+    def restart(self):
+        self.cursor = 0
+        self.limit = self.length
+
+    def limit_line(self,f):
+        old_limit = self.limit
+        self.limit = self.index_of("\n")
+        ret = f()
+        self.limit = old_limit
+        return ret
+        
+    def index_of(self, target):
+        self.push_excursion()
+        found = False
+        while not self.at_limit() and not found:
+            if self.match_inc(target):
+                found = True
+            else:
+                self.cursor += 1
+        cursor = self.cursor
+        self.pop_excursion()
+        return cursor
+        
+    def push_excursion(self):
+        self.excursions.append([self.cursor, self.limit])
+
+    def pop_excursion(self):
+        self.cursor,self.limit = self.excursions.pop()
+        
+    def save_excursion(self, fn):
+        self.push_excursion()
+        ret = fn()
+        self.pop_excursion()
+        return ret
+
+    def at_limit(self):
+        return self.cursor >= self.limit
+
+    def zapto_last(self, target):
+        start = self.cursor
+        last_index = self.cursor
+        while not self.at_limit():
+            if self.match_inc(target):
+                last_index = self.cursor
+            self.cursor += 1
+        self.cursor = last_index
+        return self.input[start:self.cursor]
+        
+    def zapto(self,target):
+        start = self.cursor
+        found = False
+        while not self.at_limit() and not found:
+            if self.match_inc(target):
+                found = True
+            else:
+                self.cursor += 1
+        return self.input[start:self.cursor]
+
+    def upto(self,target):
+        result = self.zapto(target)
+        if not self.at_limit():
+            result = result[:-1]
+        return result
+
+    def upto_last(self, target):
+        result = self.zapto_last(target)[:-1]
+        if not self.at_limit():
+            result = result[:-1]
+        return result
+
+    def skip(self,target):
+        found = False
+        while not self.at_limit() and not found:
+            if self.match_inc(target):
+                found = True
+            else:
+                self.cursor += 1
+        
+    def match(self, target):
+        tlen = len(target)
+        return self.input[self.cursor:self.cursor+tlen] == target
+
+    def match_inc(self, target):
+        matches = self.match(target)
+        if matches: self.cursor += len(target)
+        return matches
+
+    def drop_line(self):
+        self.upto("\n")
+
+    def skip_spaces(self):
+        done = False
+        while not self.at_limit() and not done:
+            c = self.char()
+            if c in white_space:
+                self.cursor += 1
+            elif c == "#":
+                self.drop_line()
+            else:
+                done = True
+
+    def goto_line(self, target):
+        def match_skip_space():
+            self.skip_spaces()
+            return self.match(target)
+
+        found = False
+        while not self.at_limit() and not found:
+            if match_skip_space():
+                found = True
+            else:
+                self.drop_line()
+
+    def zap_line(self):
+        return self.upto("\n")
+    
+    def char(self):
+        return self.input[self.cursor]
+            
+            
+class Parser(BaseParser):
+
+    def __init__(self, input):
+        BaseParser.__init__(self, input)
 
     def las_file(self):
-        version_header = self.version_header()
-        well_header = self.well_header()
-        curve_header = self.curve_header()
-        parameter_header = self.parameter_header()
-        las_data = self.las_data(curve_header)
+        version_header = self.save_excursion(self.version_header)
+        well_header = self.save_excursion(self.well_header)
+        curve_header = self.save_excursion(self.curve_header)
+        parameter_header = self.save_excursion(self.parameter_header)
+        las_data = self.save_excursion(lambda: self.las_data(curve_header))
         return LasFile(version_header,
                        well_header,
                        curve_header,
@@ -41,24 +187,20 @@ class Parser:
                        las_data)
         
     def well_header(self): 
-        parser = self.grab("~W")
-        parser.well_start()
-        descriptors = parser.descriptors()
-        ret = WellHeader(descriptors)
-        return ret
+        self.goto_line("~W")
+        self.drop_line()
+        descriptors = self.descriptors()
+        return WellHeader(descriptors)
         
-    def well_start(self):
-        self.skip_spaces()
-        self.linep().get("~W.*")
-
     def version_header(self):
-        parser = self.grab("~V")
-        parser.skip_spaces()
-        assert parser.linep().get("~V.*")
-        version = parser.linep().skip("VERS[.]").upto(":").strip()        
+        self.goto_line("~V")
+        self.drop_line()
+        self.skip("VERS.")
+        version = self.upto(":").strip()
         version = to_num(version)        
 
-        wrap = parser.linep().skip("WRAP[.]").upto(":").strip()
+        self.skip("WRAP.")
+        wrap = self.upto(":").strip()
         if wrap == "NO": 
             wrap = False
         elif wrap == "YES":
@@ -69,37 +211,42 @@ class Parser:
         return VersionHeader(version, wrap)
 
     def curve_header(self):
-        parser = self.grab("~C")
-        parser.skip_spaces()
-        assert parser.linep().get("~C.*")
-        descriptors = parser.descriptors()
+        self.goto_line("~C")
+        self.drop_line()
+        descriptors = self.descriptors()
         return CurveHeader(descriptors)
 
     def parameter_header(self):
-        parser = self.grab("~P")
-        parser.skip_spaces()
-        assert parser.linep().get("~P.*")
-        descriptors = parser.descriptors()
+        self.goto_line("~P")
+        self.drop_line()
+        descriptors = self.descriptors()
         return ParameterHeader(descriptors)
 
     def las_data(self, curve_header):
-        parser = self.grab("~A")
-        parser.skip_spaces()
-        assert parser.linep().get("~A.*")
-        data = []
-        for line in self.lines():
-            numbers = Parser(line).get_numbers()
-            data = data + numbers
-        return LasCurve.from_rows(subdivide(data, len(curve_header.descriptors)),
-                                  curve_header)
+        self.goto_line("~A")
+        self.drop_line()
+        data = self.get_numbers()
+        curves = LasCurve.from_rows(subdivide(data, len(curve_header.descriptors)),
+                                    curve_header)
+        return curves
 
     def get_numbers(self):
-        num = self.get_ignore_space(num_regex)
         nums = []
-        while num:
-            nums.append(to_num(num))
-            num = self.get_ignore_space(num_regex)
+        while not self.at_limit():
+            self.skip_spaces()
+            num = self.get_number()
+            if num != None:
+                nums.append(num)
         return nums
+
+    def get_number(self):
+        if self.at_limit(): return
+        start = self.cursor
+        while not self.at_limit() and self.input[self.cursor] in num_chars:
+            self.cursor += 1
+        num = self.input[start:self.cursor]
+        if num != "":
+            return to_num(num)
     
 
     def descriptors(self):
@@ -112,7 +259,8 @@ class Parser:
 
     def descriptor(self):
         self.skip_spaces()
-        line = self.line()
+        if self.at_limit(): return None
+        if self.input[self.cursor:self.cursor+2] in start_symbols: return
         def preprocess(stuff):
             stuff = stuff.strip()
             if stuff == "":
@@ -121,118 +269,13 @@ class Parser:
                 return to_num(stuff)
             else:
                 return stuff
-
-        if line:
-            if line.strip()[:2] in start_symbols: 
-                self.backtrack(line)
-                return
-            parser = Parser(line)
-            mnemonic = preprocess(parser.upto("[.]"))
-            unit = preprocess(parser.upto("[ ]"))
-            data = preprocess(parser.upto_last("[:]"))
-            description = preprocess(parser.current_input())
-            return Descriptor(mnemonic, unit, data, description)
-        
-    def skip_spaces(self):
-        match = re.match("\A[\n\r\t ]+", self.current_input())
-        if match: self.cursor += match.end()
+        mnemonic = preprocess(self.upto("."))
+        unit = preprocess(self.upto(" "))
+        data = preprocess(self.limit_line(lambda: self.upto_last(":")))
+        description = preprocess(self.zap_line())
+        return Descriptor(mnemonic, unit, data, description)
 
     def backtrack(self, text):
         self.cursor -= len(text)
-
-    def line(self):
-        ret = self.zapto("\n")
-        if not ret:
-            ret = self.current_input()
-            self.cursor = len(self.input)
-        elif ret.strip() != "" and ret.strip()[0] == "#":
-            ret = self.line()
-        return ret
         
         
-    def lines(self):
-        l = self.line()
-        while l:
-            yield l
-            l = self.line()
-
-    def linep(self):
-        return Parser(self.line())
-
-    def rest(self):
-        return self.current_input()
-
-    def current_input(self):
-        return self.input[self.cursor:]
-
-    def zapto_last(self, pattern):
-        return self.do_match("\A.*"+pattern, 0)
-
-    def zapto(self,pattern):
-        return self.do_match("(\A.*?)"+pattern, 0)
-
-    def upto(self,pattern):
-        ret = self.do_match("(\A.*?)"+pattern, 0)
-        if ret: return ret[:-1]
-
-    def upto_last(self, pattern):
-        ret = self.do_match("\A.*"+pattern,0)
-        if ret: return ret[:-1]
-
-    def get_ignore_space(self, pattern):
-        return self.do_match("(\A[\n\r\t ]*)("+pattern+")", 2)
-
-    def get(self, pattern):
-        return self.do_match("\A"+pattern, 0)
-
-    def grab(self, pattern):
-        cinput= self.current_input()
-        match = re.search(pattern, cinput)
-        if match:
-            start = match.start()
-            return Parser(cinput[start:])
-            
-            
-
-    def skip(self, pattern):
-        self.skip_spaces()
-        self.get(pattern)
-        return self
-
-    def do_match(self, pattern, group):
-        cinput = self.current_input()
-        match = re.match(pattern, cinput)
-        if match:
-            start = match.start()
-            end = match.end()
-            ret = cinput[start:end]
-            self.cursor += match.end()
-            return ret
-            
-
-            
-    
-
-if __name__ == "__main__":
-#    parser = Parser(text)
-#    print Parser.zapto(text, "c")
-#    print Parser.pull(text, "\n")
-#    parser = Parser(data.text['well_header'])
-#    for line in parser.lines(): print "(%s)" % line
-
-#    parser = Parser(data.text['well_header'])
-#    print parser.well_start()
-
-#    descriptors = data.text['descriptors']
-#
-#    parser = Parser(descriptors['dept'])
-#    print parser.descriptor()
-#
-#    parser = Parser(descriptors['date'])
-#    print parser.descriptor()
-
-    print data.text['well_header']
-    parser = Parser(data.text['well_header'])
-    print parser.well_header()
-
-    
