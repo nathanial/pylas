@@ -9,6 +9,8 @@ class LasFile(object):
         self.curve_header = curve_header
         self.parameter_header = parameter_header
         self._curves = curves
+        self.path = None
+        self._index = None
 
     def __eq__(self,that):
         return (isinstance(that, LasFile) and
@@ -37,10 +39,39 @@ class LasFile(object):
     def available_curves(self):
         return self.curve_mnemonics()
 
+    def has_curve(self, curve_name):
+        return curve_name in self.available_curves()
+
+    def name(self):
+        if self.path:
+            m = re.match("(.*)/([^/]+)", str(self.path))
+            return m.group(2)
+
+    def index(self):
+        if self._index:
+            return self._index
+        elif self.has_curve("dept"):
+            return self.curve("dept")
+        elif self.has_curve("depth"):
+            return self.curve("depth")
+        else:
+            raise "Cannot find depth curve!"
+
+    def set_index(self, name):    
+        if self.has_curve(name):
+            self._index = self.curve(name)
+        else:
+            raise "Cannot find curve %s " % name
+
+    def index_name(self):
+        return self.index().name()
+
     @staticmethod
     def from_(path):
         from las.parser import Parser
-        return Parser(read_file(path)).las_file()
+        lf = Parser(read_file(path)).las_file()
+        lf.path = path
+        return lf
 
     @staticmethod
     def is_lasfile(filename):
@@ -111,7 +142,6 @@ class LasCurve(object):
         return str(self.descriptor)
     
     def __repr__(self): return self.__str__()
-
     def to_list(self):
         return list(self.data)
 
@@ -137,6 +167,31 @@ class LasCurve(object):
     def find_with_mnemonic(mnemonic, curves):
         return lfind(curves, lambda f: f.descriptor.mnemonic.lower() == mnemonic)
 
+    def merge_left(self, *args, **kwargs):
+        kind = kwargs.get('kind', 'at_end')
+        that, = args
+        if that.descriptor is not self.descriptor:
+            raise "illegal merge of distinct curves"
+        if kind is 'at_end':
+            slen = len(self.data)
+            tlen = len(that.data)
+            new_data = list(self.data)
+            for i in range(slen, tlen):
+                new_data.append(that.data[i])
+            return LasCurve(self.descriptor, new_data)
+        elif kind is 'at_start': pass
+#            tlen = len(that.data)
+#            new_data = []
+#            for i in range(0, tlen)
+    
+    def min(self):
+        return min(self.to_list())
+    
+    def max(self):
+        return max(self.to_list())
+    
+        
+    
 class TransformedLasCurve(LasCurve):
     def __init__(self, lasfield, scale, offset):
         self.lasfield = lasfield
