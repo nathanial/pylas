@@ -47,7 +47,10 @@ class LasFile(object):
         if self._name: return self._name
         if self.path:
             m = re.match("(.*)/([^/]+)", str(self.path))
-            return m.group(2)
+            if m:
+                return m.group(2)
+            else:
+                return self.path
 
     def index(self):
         if self._index:
@@ -218,9 +221,11 @@ class LasCurve(object):
     
     def max(self):
         return max(self.to_list())
+    def range(self):
+        return self.max() - self.min()
     
-        
-    
+    def __len__(self):
+        return self.data_len()
 class TransformedLasCurve(LasCurve):
     def __init__(self, lasfield, scale, offset):
         self.lasfield = lasfield
