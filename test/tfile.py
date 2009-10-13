@@ -89,6 +89,22 @@ def test_transformed_lasfield2():
     for i in range(0, len(data.depths)):
         assert float_eq(tfield[i] / scale, data.depths[i] + 1)
 
+@test
+def test_merge_at_end():
+    curve1 = LasCurve(None, [1,2,3,4,5,6,7,8,9])
+    curve2 = LasCurve(None, [1,2,3,4,5,6,7,8,9,10,11,12])
+    merged = curve1.merge_left(curve2, kind='at_end')
+    for i in range(1,13):
+        assert merged[i-1] == i
+
+#@test
+def test_merge_at_start():
+    curve1 = LasCurve(None, [5,6,7,8,9])
+    curve2 = LasCurve(None, [1,2,3,4,5,6,7])
+    merged = curve1.merge_left(curve2, kind='at_start')
+    for i in range(1,10):
+        assert merged[i-1] == i
+
 if __name__ == "__main__":
     for test in tests:
         test()

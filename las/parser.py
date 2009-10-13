@@ -2,7 +2,6 @@ import re
 from las.file import *
 from las.headers import *
 from util import subdivide
-import test.data as data
 
 start_symbols = ["~A", "~C", "~W", "~P", "~V"]
 white_space = ["\n", "\r", "\t", " "]

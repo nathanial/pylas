@@ -9,6 +9,9 @@ class LasFile(object):
         self.curve_header = curve_header
         self.parameter_header = parameter_header
         self._curves = curves
+        self.path = None
+        self._name = None
+        self._index = None
 
     def __eq__(self,that):
         return (isinstance(that, LasFile) and
@@ -37,15 +40,70 @@ class LasFile(object):
     def available_curves(self):
         return self.curve_mnemonics()
 
+    def has_curve(self, curve_name):
+        return curve_name in self.available_curves()
+
+    def name(self):
+        if self._name: return self._name
+        if self.path:
+            m = re.match("(.*)/([^/]+)", str(self.path))
+            if m:
+                return m.group(2)
+            else:
+                return self.path
+
+    def index(self):
+        if self._index:
+            return self._index
+        elif self.has_curve("dept"):
+            return self.curve("dept")
+        elif self.has_curve("depth"):
+            return self.curve("depth")
+        else:
+            raise "Cannot find depth curve!"
+
+    def set_index(self, name):    
+        if self.has_curve(name):
+            self._index = self.curve(name)
+        else:
+            raise "Cannot find curve %s " % name
+
+    def index_name(self):
+        return self.index().name()
+
     @staticmethod
     def from_(path):
         from las.parser import Parser
-        return Parser(read_file(path)).las_file()
+        lf = Parser(read_file(path)).las_file()
+        lf.path = path
+        return lf
 
     @staticmethod
     def is_lasfile(filename):
         return True #fixme
 
+    def merge_left(self, *args, **kwargs):
+        kind = kwargs.get('kind', 'at_end')
+        that, = args
+        if kind is 'at_end':
+            new_curves = []
+            for curve_name in self.available_curves():
+                this_curve = self.curve(curve_name)
+                that_curve = that.curve(curve_name)
+                new_curve = this_curve.merge_left(that_curve, kind='at_end')
+                new_curves.append(new_curve)
+            return LasFile(self.version_header,
+                           self.well_header,
+                           self.curve_header,
+                           self.parameter_header,
+                           new_curves)
+
+    def merge_right(self, *args, **kwargs):
+        that = args[0]
+        args = args[1:]
+        return that.merge_left(self,*args, **kwargs)
+            
+            
 class Descriptor(object):
     def __init__(self, mnemonic, unit = None, data = None, description = None):
         self.mnemonic = mnemonic
@@ -102,8 +160,10 @@ class LasCurve(object):
         return len(self.data)
 
     def __eq__(self, that):
-        if not isinstance(that, LasCurve): return False
-        if not self.descriptor == that.descriptor: return False
+        if not isinstance(that, LasCurve): 
+            return False
+        if not self.descriptor == that.descriptor: 
+            return False
         return not lfind(tuplize(self.data, that.data), 
                          lambda dd: dd[0] - dd[1] > 0.1)
         
@@ -111,7 +171,6 @@ class LasCurve(object):
         return str(self.descriptor)
     
     def __repr__(self): return self.__str__()
-
     def to_list(self):
         return list(self.data)
 
@@ -137,6 +196,36 @@ class LasCurve(object):
     def find_with_mnemonic(mnemonic, curves):
         return lfind(curves, lambda f: f.descriptor.mnemonic.lower() == mnemonic)
 
+    def merge_left(self, *args, **kwargs):
+        kind = kwargs.get('kind', 'at_end')
+        that, = args
+        if not that.descriptor == self.descriptor:
+            raise "illegal merge of distinct curves %s %s" % (self, that)
+        if kind is 'at_end':
+            slen = len(self.data)
+            tlen = len(that.data)
+            new_data = list(self.data)
+            for i in range(slen, tlen):
+                new_data.append(that.data[i])
+            return LasCurve(self.descriptor, new_data)
+        else:
+            raise "merge kind not recognized"
+
+    def merge_right(self, *args, **kwargs):
+        that = args[0]
+        args = args[1:]
+        return that.merge_left(self, *args, **kwargs)
+    
+    def min(self):
+        return min(self.to_list())
+    
+    def max(self):
+        return max(self.to_list())
+    def range(self):
+        return self.max() - self.min()
+    
+    def __len__(self):
+        return self.data_len()
 class TransformedLasCurve(LasCurve):
     def __init__(self, lasfield, scale, offset):
         self.lasfield = lasfield
